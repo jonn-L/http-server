@@ -1,2 +1,4 @@
+# ignore all object and executable files
+server
 *.o
-*.exe
+/server_resources

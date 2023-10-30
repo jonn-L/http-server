@@ -1,5 +1,4 @@
 #include "message_handle_tools.h"
-#include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
@@ -59,8 +58,7 @@ int main(void) {
 
         // parse the request
         struct message new_request;
-        int parsing_result = parse_request(&new_request, request_buffer, request_size);
-        if (parsing_result == -1) {
+        if (parse_request(&new_request, request_buffer, request_size) == -1) {
             perror("parse_request");
             
             // send bad request message
@@ -71,14 +69,10 @@ int main(void) {
             "\r\n\r\n"
             "Bad Request";
 
-            if (send(client_socket, bad_request_response, strlen(bad_request_response), 0) == -1 ) {
+            if (send(client_socket, bad_request_response, strlen(bad_request_response), 0) == -1) {
                 perror("send");
                 return EXIT_FAILURE;
-            }; 
-        }
-        else if (parsing_result == -2) {
-            perror("malloc");
-            return EXIT_FAILURE;
+            }
         }
         puts("Request parsed!");
 
@@ -89,12 +83,21 @@ int main(void) {
         }
         puts("Response created!");
 
+        int response_size = strlen(new_response.line) + strlen(new_response.headers) 
+                            + strlen(new_response.body) + 6;
+        char response_buffer[response_size];
+        sprintf(response_buffer, "%s\r\n"
+                                 "%s\r\n"
+                                 "\r\n"
+                                 "%s",
+                                 new_response.line, new_response.headers, new_response.body);
+        send(client_socket, response_buffer, response_size, 0);
+
         message_cleanup(&new_request);
         message_cleanup(&new_response);
         close(client_socket);
-        close(main_socket);
     }
-
+    close(main_socket);
 
     return EXIT_SUCCESS;
 }

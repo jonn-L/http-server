@@ -1,8 +1,10 @@
 #ifndef MESSAGE_HANDLE_TOOLS
 #define MESSAGE_HANDLE_TOOLS
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 
 #define MAX_REQUEST_SIZE 1024
 #define PORT 8080
@@ -19,8 +21,8 @@ struct message {
     request_types request_type;
 };
 
-int parse_request(struct message *new_req, char *req_buff, int req_size);
+int parse_request(struct message *req, char *req_buff, int req_size);
 void message_cleanup(struct message *msg);
-int create_response(struct message *new_req, struct message *new_resp);
+int create_response(struct message *req, struct message *resp);
 
 #endif
