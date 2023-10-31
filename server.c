@@ -13,6 +13,12 @@ int main(void) {
     }
     puts("Socket Created!");
 
+    int reuse = 1;
+    if (setsockopt(main_socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == -1) {
+        perror("setsockopt");
+        return EXIT_FAILURE;
+    }
+
     // set up port and address for the socket
     struct sockaddr_in host;
     socklen_t host_len = sizeof(host);
@@ -73,6 +79,10 @@ int main(void) {
                 perror("send");
                 return EXIT_FAILURE;
             }
+
+            message_cleanup(&new_request);
+            close(client_socket);
+            continue;
         }
         puts("Request parsed!");
 
@@ -80,8 +90,16 @@ int main(void) {
         struct message new_response;
         if (create_response(&new_request, &new_response) == -1) {
             perror("create_response");
+            message_cleanup(&new_request);
+            message_cleanup(&new_response);
+            close(client_socket);
+            continue;
         }
         puts("Response created!");
+
+        puts(new_response.line);
+        puts(new_response.headers);
+        puts(new_response.body);
 
         int response_size = strlen(new_response.line) + strlen(new_response.headers) 
                             + strlen(new_response.body) + 6;
@@ -98,6 +116,5 @@ int main(void) {
         close(client_socket);
     }
     close(main_socket);
-
     return EXIT_SUCCESS;
 }

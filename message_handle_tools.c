@@ -72,79 +72,129 @@ char *get_content_type(char *resource) {
     return "application/octet-stream";
 }
 
-int create_response(struct message *req, struct message *resp) {
-    // extract the request-uri from the request
-    char *uri_start = strchr(req->line, ' ');
-    uri_start++;
-    char *uri_end = strrchr(req->line, ' ');
-    int uri_length = uri_end - uri_start;
-    char uri[uri_length];
-    strncpy(uri, uri_start, uri_length);
-    uri[uri_length] = '\0';
+char *read_resource(FILE *fp) {
+    // get the length of the file
+    fseek(fp, 0, SEEK_END);
+    int content_length = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
 
-    // extaract the requested resource
-    char *resource = strrchr(uri, '/');
-    resource++;
-    
-    if (req->request_type == GET) {
-        // open the file
-        char path[] = "server_resources";
-        char filepath[256];
-        snprintf(filepath, sizeof(filepath), "%s/%s", path, resource);
-        FILE *fp = fopen(filepath, "rb");
-        if (fp == NULL) {
-            perror("fopen"); // resource is not found
-            return -2;
-        }
-
-        // get the length of the file
-        fseek(fp, 0, SEEK_END);
-        int content_length = ftell(fp);
-        fseek(fp, 0, SEEK_SET);
-
-        // allocate memory for the contnent and read it
-        char *content = malloc(content_length);
-        if (content == NULL) {
-            perror("malloc");
-            fclose(fp);
-            return -3;
-        }
-        int bytes_read = fread(content, 1, content_length, fp);
-        if (bytes_read != content_length) {
-            perror("fread");
-            free(content);
-            return -3;
-        }
-
-        // set the body for the response message
-        resp->body = malloc(content_length + 1);
-        strcpy(resp->body, content);
-        resp->body[content_length] = '\0';
+    // allocate memory for the content and read it
+    char *content = malloc(content_length);
+    if (content == NULL) {
+        perror("malloc");
+        fclose(fp);
+        return NULL;
+    }
+    if (fread(content, 1, content_length, fp) != content_length) {
+        perror("fread");
+        fclose(fp);
         free(content);
+        return NULL;
+    }
+    return content;
+}
 
-        // set the headers for the response message
-        char *content_type = get_content_type(resource);
-        int headers_length = snprintf(NULL, 0, "Content-Type: %s\r\n"
-                                               "Server: jlumi/1.0\r\n"
-                                               "Content-Length: %d",
-                                               content_type, content_length) + 1;
-        if (headers_length < 0) {
-            perror("snprintf");
-        }
-        resp->headers = malloc(headers_length);
-        if (sprintf(resp->headers, "Content-Type: %s\r\n"
-                                   "Server: jlumi/1.0\r\n"
-                                   "Content-Length: %d", 
-                                   content_type, content_length) == -1) {
-            perror("asprintf");
-            return -3;
-        }
+int GET_response(struct message *resp, char *resource) {
+    // open the file
+    char path[] = "server_resources";
+    char filepath[256];
+    snprintf(filepath, sizeof(filepath), "%s/%s", path, resource);
+    FILE *fp = fopen(filepath, "rb");
 
-        // set the line for the response message
+    // if the resource is not found, read not_found page instead
+    int isNULL = 0;
+    if (fp == NULL) {
+        fp = fopen("server_resources/not_found.html", "rb");
+        isNULL = 1;
+    }
+
+    // read the resource and get the content
+    char *body = read_resource(fp);
+    if (body == NULL) {
+        return -1;
+    }
+    fclose(fp);
+    int body_length = strlen(body);
+
+    // set the body component
+    resp->body = malloc(body_length + 1);
+    strcpy(resp->body, body);
+    resp->body[body_length] = '\0';
+    free(body);
+
+    // find length of header component
+    char *content_type = get_content_type(resource);
+    int headers_length = snprintf(NULL, 0, "Content-Type: %s\r\n"
+                                            "Server: jlumi/1.0\r\n"
+                                            "Content-Length: %d",
+                                            content_type, body_length) + 1;
+    if (headers_length < 0) {
+        perror("snprintf");
+        return -1;
+    }
+
+    // set the header component
+    resp->headers = malloc(headers_length);
+    if (sprintf(resp->headers, "Content-Type: %s\r\n"
+                                "Server: jlumi/1.0\r\n"
+                                "Content-Length: %d", 
+                                content_type, body_length) == -1) {
+        perror("sprintf");
+        return -1;
+    }
+
+    // set the line component
+    if (isNULL == 0) {
         char *line = "HTTP/1.1 200 OK";
         resp->line = malloc(strlen(line) + 1);
         strcpy(resp->line, line);
         resp->line[strlen(line)] = '\0';
+    }
+    else {
+        char *line = "HTTP/1.1 404 Not Found";
+        resp->line = malloc(strlen(line) + 1);
+        strcpy(resp->line, line);
+        resp->line[strlen(line)] = '\0';
+    }
+
+    return 0;
+}
+
+int POST_response(struct message *resp, char *action) {
+    if (strcmp(action, "submit-user") == 0) {
+
+    }
+    else if (strcmp(action, "create-user") == 0) {
+
+    }
+    else if (strcmp(action, "upload-file") == 0) {
+
+    }
+    else {
+        // not implemented
+    }
+
+    return 0;
+}
+
+int create_response(struct message *req, struct message *resp) {
+    // extract the request-uri from the request
+    char *uri_start = strchr(req->line, ' ') + 1;
+    char *uri_end = strrchr(req->line, ' ');
+    int uri_length = uri_end - uri_start;
+    char uri[uri_length + 1];
+    strncpy(uri, uri_start, uri_length);
+    uri[uri_length] = '\0';
+
+    // extaract the requested resource
+    char *action = strrchr(uri, '/');
+    action++;
+    
+    if (req->request_type == GET) {
+        return GET_response(resp, action);
+    }
+    else if (req->request_type == POST) {
+        return POST_response(resp, action);
     }
 
     return 0;
