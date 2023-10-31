@@ -1,9 +1,37 @@
 #include "message_handle_tools.h"
 
+void str_trim(char *str);
+int parse_request(struct message *req, char *req_buff, int req_size);
+char *read_resource(FILE *fp);
+char *get_resource_type(char *resource);
+int set_headers(struct message *resp, char *resource_type, int body_length);
+char *parse_key_value(char *pairs, char *target, char *pair_seperator, char key_value_seperator);
+char *api_example(char *endpoint, char *content_type, char *data);
+char *clean_json(char *json);
+int GET_response(struct message *resp, char *uri);
+int POST_response(struct message *req, struct message *resp, char *endpoint);
+
 void message_cleanup(struct message *msg) {
     free(msg->line);
     free(msg->headers);
     free(msg->body);
+}
+
+void str_trim(char *str) {
+    int i = 0, j = strlen(str) - 1;
+    
+    while (str[i] == ' ') {
+        i++;
+    }
+    while ((str[j] == ' ') && j >= i) {
+        j--;
+    }
+    
+    for (int k = i; k <= j; k++) {
+        str[k - i] = str[k];
+    }
+    
+    str[j - i + 1] = '\0';
 }
 
 int parse_request(struct message *req, char *req_buff, int req_size) {
@@ -54,47 +82,30 @@ int parse_request(struct message *req, char *req_buff, int req_size) {
     return 0;
 }
 
-char *get_content_type(char *resource) {
-    char *extension = strchr(resource, '.');
-
-    if (extension != NULL) {
-        if (strcmp(extension, ".html") == 0) {
-            return "text/html";
-        }
-        else if (strcmp(extension, ".css") == 0) {
-            return "text/css";
-        }
-        else if ((strcmp(extension, ".jpeg") == 0) || (strcmp(extension, ".png") == 0)) {
-            return "image/jpeg";
-        }
+int create_response(struct message *req, struct message *resp) {
+    // extract the request-uri from the request
+    char *uri_start = strchr(req->line, ' ') + 1;
+    char *uri_end = strrchr(req->line, ' ');
+    int uri_length = uri_end - uri_start;
+    char uri[uri_length + 1];
+    strncpy(uri, uri_start, uri_length);
+    uri[uri_length] = '\0';
+    
+    if (req->request_type == GET) {
+        return GET_response(resp, uri);
+    }
+    else if (req->request_type == POST) {
+        return POST_response(req, resp, uri);
     }
 
-    return "application/octet-stream";
+    return 0;
 }
 
-char *read_resource(FILE *fp) {
-    // get the length of the file
-    fseek(fp, 0, SEEK_END);
-    int content_length = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
+int GET_response(struct message *resp, char *uri) {
+    // extaract the requested resource
+    char *resource = strrchr(uri, '/');
+    resource++;
 
-    // allocate memory for the content and read it
-    char *content = malloc(content_length);
-    if (content == NULL) {
-        perror("malloc");
-        fclose(fp);
-        return NULL;
-    }
-    if (fread(content, 1, content_length, fp) != content_length) {
-        perror("fread");
-        fclose(fp);
-        free(content);
-        return NULL;
-    }
-    return content;
-}
-
-int GET_response(struct message *resp, char *resource) {
     // open the file
     char path[] = "server_resources";
     char filepath[256];
@@ -122,26 +133,19 @@ int GET_response(struct message *resp, char *resource) {
     resp->body[body_length] = '\0';
     free(body);
 
-    // find length of header component
-    char *content_type = get_content_type(resource);
-    int headers_length = snprintf(NULL, 0, "Content-Type: %s\r\n"
-                                            "Server: jlumi/1.0\r\n"
-                                            "Content-Length: %d",
-                                            content_type, body_length) + 1;
-    if (headers_length < 0) {
-        perror("snprintf");
-        return -1;
+    // set the header component
+    if (isNULL == 0) {
+        char *resource_type = get_resource_type(resource);
+        if (set_headers(resp, resource_type, body_length) == -1) {
+            return -1;
+        }
+    }
+    else {
+        if (set_headers(resp, "text/html", body_length) == -1) {
+            return -1;
+        }
     }
 
-    // set the header component
-    resp->headers = malloc(headers_length);
-    if (sprintf(resp->headers, "Content-Type: %s\r\n"
-                                "Server: jlumi/1.0\r\n"
-                                "Content-Length: %d", 
-                                content_type, body_length) == -1) {
-        perror("sprintf");
-        return -1;
-    }
 
     // set the line component
     if (isNULL == 0) {
@@ -160,42 +164,180 @@ int GET_response(struct message *resp, char *resource) {
     return 0;
 }
 
-int POST_response(struct message *resp, char *action) {
-    if (strcmp(action, "submit-user") == 0) {
+char *read_resource(FILE *fp) {
+    // get the length of the file
+    fseek(fp, 0, SEEK_END);
+    int content_length = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
 
+    // allocate memory for the content and read it
+    char *content = malloc(content_length);
+    if (content == NULL) {
+        perror("malloc");
+        fclose(fp);
+        return NULL;
     }
-    else if (strcmp(action, "create-user") == 0) {
+    if (fread(content, 1, content_length, fp) != content_length) {
+        perror("fread");
+        fclose(fp);
+        free(content);
+        return NULL;
+    }
+    return content;
+}
 
-    }
-    else if (strcmp(action, "upload-file") == 0) {
+char *get_resource_type(char *resource) {
+    char *extension = strchr(resource, '.');
 
+    if (extension != NULL) {
+        if (strcmp(extension, ".html") == 0) {
+            return "text/html";
+        }
+        else if (strcmp(extension, ".css") == 0) {
+            return "text/css";
+        }
+        else if (strcmp(extension, ".txt") == 0) {
+            return "text/plain";
+        }
+        else if ((strcmp(extension, ".jpeg") == 0) || (strcmp(extension, ".png") == 0)) {
+            return "image/jpeg";
+        }
     }
-    else {
-        // not implemented
-    }
+
+    return "application/octet-stream";
+}
+
+int set_headers(struct message *resp, char *resource_type, int body_length) {
+    int headers_length = snprintf(NULL, 0, "Content-Type: %s\r\n"
+                                            "Server: jlumi/1.0\r\n"
+                                            "Content-Length: %d",
+                                            resource_type, body_length) + 1;
+    if (headers_length < 0) {
+        perror("snprintf");
+        return -1;
+    }     
+
+    resp->headers = malloc(headers_length);
+    if (sprintf(resp->headers, "Content-Type: %s\r\n"
+                               "Server: jlumi/1.0\r\n"
+                               "Content-Length: %d", 
+                               resource_type, body_length) == -1) {
+        perror("sprintf");
+        return -1;
+    } 
 
     return 0;
 }
 
-int create_response(struct message *req, struct message *resp) {
-    // extract the request-uri from the request
-    char *uri_start = strchr(req->line, ' ') + 1;
-    char *uri_end = strrchr(req->line, ' ');
-    int uri_length = uri_end - uri_start;
-    char uri[uri_length + 1];
-    strncpy(uri, uri_start, uri_length);
-    uri[uri_length] = '\0';
+int POST_response(struct message *req, struct message *resp, char *endpoint) {
+    char *content_type = parse_key_value(req->headers, "Content-Type", "\r\n", ':');
 
-    // extaract the requested resource
-    char *action = strrchr(uri, '/');
-    action++;
-    
-    if (req->request_type == GET) {
-        return GET_response(resp, action);
-    }
-    else if (req->request_type == POST) {
-        return POST_response(resp, action);
+    char *body = api_example(endpoint, content_type, req->body);
+
+    int isNULL = 0;
+    if (body == NULL) {
+        body = strdup("API endpoint not implemented yet");
     }
 
+    if (isNULL == 0) {
+        char *line = "HTTP/1.1 201 Created";
+        resp->line = malloc(strlen(line));
+        strcpy(resp->line, line);
+    }
+    else {
+        char *line = "HTTP/1.1 501 Not Implemented";
+        resp->line = malloc(strlen(line));
+        strcpy(resp->line, line); 
+    }
+
+    int body_length = strlen(body);
+    // set the header component
+    if (isNULL == 0) {
+        if (set_headers(resp, content_type, body_length) == -1) {
+            return -1;
+        }
+    }
+    else {
+        if (set_headers(resp, "text/plain", body_length) == -1) {
+            return -1;
+        }
+    }
+
+    resp->body = malloc(body_length);
+    strcpy(resp->body, body);
+
+    free(content_type);
+    free(body);
     return 0;
+}
+
+char *parse_key_value(char *pairs, char *target, char *pair_seperator, char key_value_seperator) {
+    char *local_pairs = strdup(pairs);
+
+    char *local_pair = strtok(local_pairs, pair_seperator);
+    char *key, *value;
+
+    while (local_pair != NULL) {
+        str_trim(local_pair);
+        char *key_end = strchr(local_pair, key_value_seperator) -1;
+        key = malloc(key_end - local_pair + 1);
+        strncpy(key, local_pair, key_end - local_pair + 1);
+        
+        if (strcmp(key, target) == 0) {
+            char *value_start = local_pair + strlen(key) + 1;
+            char *value_end = local_pair + strlen(local_pair);
+            value = malloc(value_end - value_start);
+            strncpy(value, value_start, value_end - value_start);
+            str_trim(value); 
+            free(key);
+            free(local_pairs);
+
+            return value;
+        }
+
+        local_pair = strtok(NULL, pair_seperator);
+    }
+
+    free(local_pairs);
+
+    return NULL;
+}
+
+char *api_example(char *endpoint, char *content_type, char *data) {
+    FILE *fp = fopen("server_resources/users.txt", "a");
+
+    if (strcmp(content_type, "application/json") == 0) {
+        char *cleaned_json = clean_json(data);
+        char *username = parse_key_value(cleaned_json, "\"username\"", ",", ':');
+        char *password = parse_key_value(cleaned_json, "\"password\"", ",", ':');
+
+        free(cleaned_json);
+        fprintf(fp, "[ %s : %s ]\n", username, password);
+        fclose(fp);
+
+        char *body = malloc(256);
+        snprintf(body, 256, "{\"message\": \"User created successfully\", \"username\": \"%s\"}", username);
+
+        return body;
+    }
+
+    return NULL;
+}
+
+char *clean_json(char *json) {
+    char *cleaned_json;
+    cleaned_json = malloc(100);
+
+    int len = strlen(json);
+    int j = 0;
+
+    for (int i = 0; i < len; i++) {
+        if (json[i] != '{' && json[i] != '}') {
+            cleaned_json[j] = json[i];
+            j++;
+        }
+    }
+    cleaned_json[j] = '\0';
+
+    return cleaned_json;
 }

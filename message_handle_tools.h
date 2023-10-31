@@ -5,10 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-#define MAX_REQUEST_SIZE 1024
-#define PORT 8080
-
 typedef enum {
     GET, 
     POST

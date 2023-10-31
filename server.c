@@ -4,6 +4,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#define MAX_REQUEST_SIZE 1024
+#define PORT 8080
+
 int main(void) {
     // create the socket
     int main_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -65,7 +68,7 @@ int main(void) {
         // parse the request
         struct message new_request;
         if (parse_request(&new_request, request_buffer, request_size) == -1) {
-            perror("parse_request");
+            fprintf(stderr, "parse_request: error");
             
             // send bad request message
             char *bad_request_response = 
@@ -89,7 +92,7 @@ int main(void) {
         // create response
         struct message new_response;
         if (create_response(&new_request, &new_response) == -1) {
-            perror("create_response");
+            fprintf(stderr, "create_response: error");
             message_cleanup(&new_request);
             message_cleanup(&new_response);
             close(client_socket);
