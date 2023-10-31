@@ -1,4 +1,3 @@
 # ignore all object and executable files
 server
 *.o
-/server_resources
