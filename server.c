@@ -9,8 +9,9 @@
 #define PORT 8080
 #define NR_OF_THREADS 30
 
+// Function to handle client connection
 static void *handle_connection(void *arg) {
-    int client_socket = (int*) arg;
+    int client_socket = *((int*) arg);
 
     // create buffer for request
     char request_buffer[MAX_REQUEST_SIZE];
@@ -20,6 +21,7 @@ static void *handle_connection(void *arg) {
     request_size = recv(client_socket, request_buffer, MAX_REQUEST_SIZE, 0);
     if (request_size == -1) {
         perror("recv");
+        close(client_socket);
         return NULL;
     }
     puts("Request received!");
@@ -39,7 +41,6 @@ static void *handle_connection(void *arg) {
 
         if (send(client_socket, bad_request_response, strlen(bad_request_response), 0) == -1) {
             perror("send");
-            return NULL;
         }
 
         message_cleanup(&new_request);
@@ -53,9 +54,7 @@ static void *handle_connection(void *arg) {
     if (create_response(&new_request, &new_response) == -1) {
         fprintf(stderr, "create_response: error");
         message_cleanup(&new_request);
-        message_cleanup(&new_response);
         close(client_socket);
-
         return NULL;
     }
     puts("Response created!");
@@ -94,6 +93,7 @@ int main(void) {
     int reuse = 1;
     if (setsockopt(main_socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == -1) {
         perror("setsockopt");
+        close(main_socket);
         return EXIT_FAILURE;
     }
 
@@ -108,15 +108,16 @@ int main(void) {
     // bind the socket to that port and address
     if (bind(main_socket, (struct sockaddr *) &host, host_len) == -1) {
         perror("bind");
+        close(main_socket);
         return EXIT_FAILURE;
     }
     puts("Socket Binded!");
-
 
     while (1) {
         // wait for connection request
         if (listen(main_socket, NR_OF_THREADS) == -1) {
             perror("listen");
+            close(main_socket);
             return EXIT_FAILURE;
         }
 
@@ -124,26 +125,27 @@ int main(void) {
         int client_socket = accept(main_socket, (struct sockaddr *)&host, &host_len);
         if (client_socket == -1) {
             perror("accept");
-            return NULL;
+            close(main_socket);
+            return EXIT_FAILURE;
         }
         puts("Connection accepted!");
 
-        pthread_t tids[NR_OF_THREADS];
-        for (int i = 0; i < NR_OF_THREADS; i++) {
-            if (pthread_create(&tids[i], NULL, handle_connection, &client_socket)) {
-                perror("pthread_create");
-                return EXIT_FAILURE;
-            }
+        // create the the thread
+        pthread_t tid;
+        if (pthread_create(&tid, NULL, handle_connection, &client_socket)) {
+            perror("pthread_create");
+            close(client_socket);
+            return EXIT_FAILURE;
         }
 
-        for (int i = 0; i < NR_OF_THREADS; i++) {
-            if (pthread_join(tids[i], NULL)) {
-                perror("pthread_join");
-                return EXIT_FAILURE;
-            }
+        // join it back
+        if (pthread_detach(tid)) {  
+            perror("pthread_detach");
+            close(client_socket);
+            return EXIT_FAILURE;
         }
-
     }
+
     close(main_socket);
     return EXIT_SUCCESS;
 }
