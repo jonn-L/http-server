@@ -37,7 +37,7 @@ curl -X POST http://localhost:8080/create-user \
 
 The server processes the POST request and adds the user to the "users.txt" file within the "server_resources" directory.
 
-## Creating Custom API enpoints
+## Creating custom API enpoints
 
 You can also add your own API endpoints by following these steps:
 
