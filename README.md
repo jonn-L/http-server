@@ -2,7 +2,7 @@
 
 This is a HTTP server implemented in C that handles both GET and POST requests.
 
-## Running the server
+## Running the Server
 
 To run the server, execute the following commands in your terminal after cloning the repository:
 
@@ -37,7 +37,7 @@ curl -X POST http://localhost:8080/create-user \
 
 The server processes the POST request and adds the user to the "users.txt" file within the "server_resources" directory.
 
-## Creating custom API enpoints
+## Creating Custom API Enpoints
 
 You can also add your own API endpoints by following these steps:
 
