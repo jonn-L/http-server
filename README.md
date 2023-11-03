@@ -43,5 +43,5 @@ You can also add your own API endpoints by following these steps:
 
 1. Define the prototype of your endpoint in the "message_handle_tools.h" file.
 2. Inside the "endpoints.c" file, create the functionality for your custom API endpoint.
-3. Add a case for it the api_call function in the "message_handle_tools.c" file to handle your custom endpoint requests.
+3. Add a case for it in the api_call function inside the "message_handle_tools.c" file to handle your custom endpoint requests.
 
