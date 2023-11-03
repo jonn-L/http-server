@@ -19,9 +19,16 @@ struct message {
     request_types request_type;
 };
 
-// sone shared functions between them
+// functions shared betwen 'server.c' and 'message_handle_tools.c'
 int parse_request(struct message *req, char *req_buff, int req_size);
 void message_cleanup(struct message *msg);
 int create_response(struct message *req, struct message *resp, pthread_mutex_t *POST_lock);
+
+// functions shared betwen 'api_example.c' and 'message_handle_tools.c'
+int parse_request(struct message *req, char *req_buff, int req_size);
+char *parse_key_value(char *pairs, char *target, char *pair_seperator, char key_value_seperator);
+
+// add api endpoint function prototypes here
+char *create_user(char *data);
 
 #endif

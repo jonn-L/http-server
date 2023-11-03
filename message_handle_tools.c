@@ -2,13 +2,10 @@
 
 // function protypes
 void str_trim(char *str);
-int parse_request(struct message *req, char *req_buff, int req_size);
-char *read_resource(FILE *fp);
 char *get_resource_type(char *resource);
 int set_headers(struct message *resp, char *resource_type, int body_length);
-char *parse_key_value(char *pairs, char *target, char *pair_seperator, char key_value_seperator);
-char *api_example(char *endpoint, char *content_type, char *data);
-char *clean_json(char *json);
+char *read_resource(FILE *fp);
+char *api_call(char *endpoint, char *data);
 int GET_response(struct message *resp, char *uri);
 int POST_response(struct message *req, struct message *resp, char *endpoint);
 
@@ -253,7 +250,7 @@ int POST_response(struct message *req, struct message *resp, char *endpoint) {
     char *content_type = parse_key_value(req->headers, "Content-Type", "\r\n", ':');
 
     // just an example api, you can add your own one here
-    char *body = api_example(endpoint, content_type, req->body);
+    char *body = api_call(endpoint, req->body);
 
     // if the endpoint does not exist, set an appropriate body
     int isNULL = 0;
@@ -328,43 +325,15 @@ char *parse_key_value(char *pairs, char *target, char *pair_seperator, char key_
     return NULL;
 }
 
-// api example that add the user to the users.txt in the server_resources
-char *api_example(char *endpoint, char *content_type, char *data) {
-    FILE *fp = fopen("server_resources/users.txt", "a");
+// function to handle API calls
+char *api_call(char *endpoint, char *data) {
 
-    if (strcmp(content_type, "application/json") == 0) {
-        char *cleaned_json = clean_json(data);
-        char *username = parse_key_value(cleaned_json, "\"username\"", ",", ':');
-        char *password = parse_key_value(cleaned_json, "\"password\"", ",", ':');
-
-        free(cleaned_json);
-        fprintf(fp, "[ %s : %s ]\n", username, password);
-        fclose(fp);
-
-        char *body = malloc(256);
-        snprintf(body, 256, "{\"message\": \"User created successfully\", \"username\": %s}", username);
-
-        return body;
+    if (strcmp(endpoint, "create-user")) {
+        return create_user(data);
+    }
+    else if (strcmp(endpoint, "some_other_endpoint")) {
+        // add your own API endpoint here
     }
 
     return NULL;
-}
-
-// function to remove the curly brackets from the JSON data
-char *clean_json(char *json) {
-    char *cleaned_json;
-    cleaned_json = malloc(100);
-
-    int len = strlen(json);
-    int j = 0;
-
-    for (int i = 0; i < len; i++) {
-        if (json[i] != '{' && json[i] != '}') {
-            cleaned_json[j] = json[i];
-            j++;
-        }
-    }
-    cleaned_json[j] = '\0';
-
-    return cleaned_json;
 }
