@@ -3,25 +3,30 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <pthread.h>
 
 #define MAX_REQUEST_SIZE 1024
 #define PORT 8080
 #define NR_OF_THREADS 30
 
+struct args {
+    int client_socket;
+    pthread_mutex_t POST_lock;
+};
+
+
 // Function to handle client connection
 static void *handle_connection(void *arg) {
-    int client_socket = *((int*) arg);
+    struct args *args = (struct args*) arg;
 
     // create buffer for request
     char request_buffer[MAX_REQUEST_SIZE];
     int request_size;
 
     // receive the request
-    request_size = recv(client_socket, request_buffer, MAX_REQUEST_SIZE, 0);
+    request_size = recv(args->client_socket, request_buffer, MAX_REQUEST_SIZE, 0);
     if (request_size == -1) {
         perror("recv");
-        close(client_socket);
+        close(args->client_socket);
         return NULL;
     }
     puts("Request received!");
@@ -39,29 +44,25 @@ static void *handle_connection(void *arg) {
         "\r\n\r\n"
         "Bad Request";
 
-        if (send(client_socket, bad_request_response, strlen(bad_request_response), 0) == -1) {
+        if (send(args->client_socket, bad_request_response, strlen(bad_request_response), 0) == -1) {
             perror("send");
         }
 
         message_cleanup(&new_request);
-        close(client_socket);
+        close(args->client_socket);
         return NULL;
     }
     puts("Request parsed!");
 
     // create response
     struct message new_response;
-    if (create_response(&new_request, &new_response) == -1) {
+    if (create_response(&new_request, &new_response, &args->POST_lock) == -1) {
         fprintf(stderr, "create_response: error");
         message_cleanup(&new_request);
-        close(client_socket);
+        close(args->client_socket);
         return NULL;
     }
     puts("Response created!");
-
-    puts(new_response.line);
-    puts(new_response.headers);
-    puts(new_response.body);
 
     // 6 is the number of '\r' and '\n' characters that are needed in the response
     int response_size = strlen(new_response.line) + strlen(new_response.headers) 
@@ -72,11 +73,13 @@ static void *handle_connection(void *arg) {
                                 "\r\n"
                                 "%s",
                                 new_response.line, new_response.headers, new_response.body);
-    send(client_socket, response_buffer, response_size, 0);
+    send(args->client_socket, response_buffer, response_size, 0);
+
+    puts(response_buffer);
 
     message_cleanup(&new_request);
     message_cleanup(&new_response);
-    close(client_socket);
+    close(args->client_socket);
 
     return NULL;
 }
@@ -120,7 +123,7 @@ int main(void) {
             close(main_socket);
             return EXIT_FAILURE;
         }
-
+        
         // accept the connection request
         int client_socket = accept(main_socket, (struct sockaddr *)&host, &host_len);
         if (client_socket == -1) {
@@ -130,9 +133,11 @@ int main(void) {
         }
         puts("Connection accepted!");
 
+        struct args args = { .client_socket = client_socket, .POST_lock = PTHREAD_MUTEX_INITIALIZER };
+
         // create the the thread
         pthread_t tid;
-        if (pthread_create(&tid, NULL, handle_connection, &client_socket)) {
+        if (pthread_create(&tid, NULL, handle_connection, &args)) {
             perror("pthread_create");
             close(client_socket);
             return EXIT_FAILURE;

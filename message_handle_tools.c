@@ -1,5 +1,6 @@
 #include "message_handle_tools.h"
 
+// function protypes
 void str_trim(char *str);
 int parse_request(struct message *req, char *req_buff, int req_size);
 char *read_resource(FILE *fp);
@@ -12,21 +13,32 @@ int GET_response(struct message *resp, char *uri);
 int POST_response(struct message *req, struct message *resp, char *endpoint);
 
 void message_cleanup(struct message *msg) {
-    free(msg->line);
-    free(msg->headers);
-    free(msg->body);
+    // free allocated memory for message components
+    if (msg->line != NULL) {
+        free(msg->line);
+        msg->line = NULL;
+    }
+    if (msg->headers != NULL) {
+        free(msg->headers);
+        msg->headers = NULL;
+    }
+    if (msg->body != NULL) {
+        free(msg->body);
+        msg->body = NULL;
+    }
 }
 
+// function to remove whitespace and newlines for a string
 void str_trim(char *str) {
     int i = 0, j = strlen(str) - 1;
     
-    while (str[i] == ' ') {
+    while ((str[i] == ' ') || (str[i] == '\n')) {
         i++;
     }
-    while ((str[j] == ' ') && j >= i) {
+    while (((str[j] == ' ') || (str[j] == '\n')) && j >= i) {
         j--;
     }
-    
+
     for (int k = i; k <= j; k++) {
         str[k - i] = str[k];
     }
@@ -82,7 +94,7 @@ int parse_request(struct message *req, char *req_buff, int req_size) {
     return 0;
 }
 
-int create_response(struct message *req, struct message *resp) {
+int create_response(struct message *req, struct message *resp, pthread_mutex_t *POST_lock) {
     // extract the request-uri from the request
     char *uri_start = strchr(req->line, ' ') + 1;
     char *uri_end = strrchr(req->line, ' ');
@@ -95,7 +107,10 @@ int create_response(struct message *req, struct message *resp) {
         return GET_response(resp, uri);
     }
     else if (req->request_type == POST) {
+        (void) pthread_mutex_lock(POST_lock);
         return POST_response(req, resp, uri);
+        (void) pthread_mutex_unlock(POST_lock);
+
     }
 
     return 0;
@@ -189,6 +204,7 @@ char *read_resource(FILE *fp) {
 char *get_resource_type(char *resource) {
     char *extension = strchr(resource, '.');
 
+    // depending on the file extension requested, return a different content-type
     if (extension != NULL) {
         if (strcmp(extension, ".html") == 0) {
             return "text/html";
@@ -207,7 +223,9 @@ char *get_resource_type(char *resource) {
     return "application/octet-stream";
 }
 
+// set headers of a message
 int set_headers(struct message *resp, char *resource_type, int body_length) {
+    // get the potenial size
     int headers_length = snprintf(NULL, 0, "Content-Type: %s\r\n"
                                             "Server: jlumi/1.0\r\n"
                                             "Content-Length: %d",
@@ -217,6 +235,7 @@ int set_headers(struct message *resp, char *resource_type, int body_length) {
         return -1;
     }     
 
+    // allocate memory for the headers and put them into the message component
     resp->headers = malloc(headers_length);
     if (sprintf(resp->headers, "Content-Type: %s\r\n"
                                "Server: jlumi/1.0\r\n"
@@ -230,15 +249,19 @@ int set_headers(struct message *resp, char *resource_type, int body_length) {
 }
 
 int POST_response(struct message *req, struct message *resp, char *endpoint) {
+    // get the content-type for the api endpoint call
     char *content_type = parse_key_value(req->headers, "Content-Type", "\r\n", ':');
 
+    // just an example api, you can add your own one here
     char *body = api_example(endpoint, content_type, req->body);
 
+    // if the endpoint does not exist, set an appropriate body
     int isNULL = 0;
     if (body == NULL) {
         body = strdup("API endpoint not implemented yet");
     }
 
+    // set line component
     if (isNULL == 0) {
         char *line = "HTTP/1.1 201 Created";
         resp->line = malloc(strlen(line));
@@ -271,6 +294,7 @@ int POST_response(struct message *req, struct message *resp, char *endpoint) {
     return 0;
 }
 
+// function to parse the headers and the JSON data from the api example call
 char *parse_key_value(char *pairs, char *target, char *pair_seperator, char key_value_seperator) {
     char *local_pairs = strdup(pairs);
 
@@ -283,7 +307,7 @@ char *parse_key_value(char *pairs, char *target, char *pair_seperator, char key_
         key = malloc(key_end - local_pair + 1);
         strncpy(key, local_pair, key_end - local_pair + 1);
         
-        if (strcmp(key, target) == 0) {
+        if (strncmp(key, target, strlen(target)) == 0) {
             char *value_start = local_pair + strlen(key) + 1;
             char *value_end = local_pair + strlen(local_pair);
             value = malloc(value_end - value_start);
@@ -297,12 +321,14 @@ char *parse_key_value(char *pairs, char *target, char *pair_seperator, char key_
 
         local_pair = strtok(NULL, pair_seperator);
     }
-
+    
+    free(key);
     free(local_pairs);
 
     return NULL;
 }
 
+// api example that add the user to the users.txt in the server_resources
 char *api_example(char *endpoint, char *content_type, char *data) {
     FILE *fp = fopen("server_resources/users.txt", "a");
 
@@ -316,7 +342,7 @@ char *api_example(char *endpoint, char *content_type, char *data) {
         fclose(fp);
 
         char *body = malloc(256);
-        snprintf(body, 256, "{\"message\": \"User created successfully\", \"username\": \"%s\"}", username);
+        snprintf(body, 256, "{\"message\": \"User created successfully\", \"username\": %s}", username);
 
         return body;
     }
@@ -324,6 +350,7 @@ char *api_example(char *endpoint, char *content_type, char *data) {
     return NULL;
 }
 
+// function to remove the curly brackets from the JSON data
 char *clean_json(char *json) {
     char *cleaned_json;
     cleaned_json = malloc(100);
