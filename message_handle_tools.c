@@ -294,6 +294,7 @@ int POST_response(struct message *req, struct message *resp, char *endpoint) {
 // function to parse the headers and the JSON data from the api example call
 char *parse_key_value(char *pairs, char *target, char *pair_seperator, char key_value_seperator) {
     char *local_pairs = strdup(pairs);
+    str_trim(local_pairs);
 
     char *local_pair = strtok(local_pairs, pair_seperator);
     char *key, *value;
