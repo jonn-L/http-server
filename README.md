@@ -22,7 +22,7 @@ curl http://localhost:8080/homepage.html
 
 Any files you want to serve should be placed in the "server_resources" directory.
 
-![alttext](screenshots/GET-request.png)
+<!-- ![alttext](screenshots/GET-request.png) -->
 
 ### Handling POST Requests
 
@@ -39,7 +39,7 @@ curl -X POST http://localhost:8080/create-user \
 
 The server processes the POST request and adds the user to the "users.txt" file within the "server_resources" directory.
 
-![alttext](screenshots/POST-request.png)
+<!-- ![alttext](screenshots/POST-request.png) -->
 
 ## Creating Custom API Enpoints
 
